@@ -33,6 +33,7 @@ class AutoFSM(Node):
         self.nav_timeout = 10.0
         self.msg_callback = CallBackMsg()
         self.FSM_state = 0
+        self.flag = True
 
         #Init
         nav_to_pose.yaml_read(self)
@@ -84,10 +85,10 @@ class AutoFSM(Node):
 
     def state_update(self):
         #哨兵血量高于设定血量，且基地血量健康，采取激进策略进攻
-        if self.msg_callback.current_robot_hp > self.set_unhealth_robot_hp and self.msg_callback.current_base_hp == self.set_unhealth_base_hp:
+        if self.msg_callback.current_robot_hp > self.set_unhealth_robot_hp and self.msg_callback.current_base_hp == self.set_unhealth_base_hp and self.flag == True:
             self.FSM_state = 1
         #哨兵血量低于设定血量，且基地血量健康，采取补给回血模式
-        elif self.msg_callback.current_robot_hp <= self.set_unhealth_robot_hp and self.msg_callback.current_base_hp == self.set_unhealth_base_hp:
+        elif self.msg_callback.current_base_hp == self.set_unhealth_base_hp:
             self.FSM_state = 2 
         #基地血量低于健康状态，采取回防基地模式
         elif self.msg_callback.current_base_hp < self.set_unhealth_base_hp:
@@ -121,6 +122,7 @@ class AutoFSM(Node):
     
     def mission_restore(self):
         self.get_logger().info("开始回血")
+        self.flag = False
         while self.FSM_state == 2 and rclpy.ok():
             self.get_logger().info("正在回血状态中...")
             goal_pose = PoseStamped()
@@ -131,6 +133,8 @@ class AutoFSM(Node):
             goal_pose.pose.orientation.w = 0.0
 
             self.navigator.goToPose(goal_pose)
+            if(self.msg_callback.current_robot_hp>=self.set_unhealth_robot_hp+100):
+                self.flag = True
             self.rate.sleep()
         self.get_logger().info("退出回血")
             
@@ -138,7 +142,7 @@ class AutoFSM(Node):
     def mission_resist(self):
         self.get_logger().info("开始回防")
         while self.FSM_state == 3 and rclpy.ok():
-            self.get_logger().info("正在回放状态中...")
+            self.get_logger().info("正在回防状态中...")
             goal_pose = PoseStamped()
             goal_pose.header.frame_id = 'map'
             goal_pose.header.stamp = self.get_clock().now().to_msg()
